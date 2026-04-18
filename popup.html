@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chrome Agent AI</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🤖 Chrome Agent AI</h1>
+    </header>
+
+    <div id="api-keys-section" class="api-keys-section">
+      <h3>API Keys Setup</h3>
+      <div class="input-group">
+        <label for="gemini-key">Google Gemini API Key:</label>
+        <input type="password" id="gemini-key" placeholder="Enter Gemini API key">
+      </div>
+      <div class="input-group">
+        <label for="weather-key">OpenWeatherMap API Key:</label>
+        <input type="password" id="weather-key" placeholder="Enter Weather API key">
+      </div>
+      <button id="save-keys-btn">Save Keys</button>
+      <div id="api-error" class="error-message"></div>
+    </div>
+
+    <div id="chain-container" class="chain-container"></div>
+
+    <div class="input-section">
+      <input type="text" id="user-input" placeholder="Ask me anything..." disabled>
+      <button id="send-btn" disabled>Send</button>
+      <button id="clear-btn" disabled>Clear</button>
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script src="tools.js"></script>
+  <script src="agent.js"></script>
+</body>
+</html>

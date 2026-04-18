@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Chrome Agent AI",
+  "version": "1.0.0",
+  "description": "Agentic AI with multi-step reasoning and visual tool chain display",
+  "permissions": [],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openweathermap.org/*",
+    "https://news.google.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🤖</text></svg>",
+      "48": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><text y='38' font-size='38'>🤖</text></svg>",
+      "128": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'><text y='100' font-size='100'>🤖</text></svg>"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
