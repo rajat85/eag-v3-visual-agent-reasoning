@@ -31,7 +31,7 @@ A simple Chrome extension demonstrating agentic AI with multi-step reasoning, to
 2. Open Chrome and go to `chrome://extensions`
 3. Enable "Developer mode" (top right toggle)
 4. Click "Load unpacked"
-5. Select the `chrome-agent-plugin` folder
+5. Select the project folder
 
 ### 3. Configure API Keys
 
