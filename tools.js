@@ -4,6 +4,11 @@
  * Tool 1: Get current weather for a city
  */
 async function getWeather(city) {
+  if (!city || city.trim() === '') {
+    throw new Error('City parameter is required');
+  }
+
+  // TODO: Consider using chrome.storage.local for better security
   const apiKey = localStorage.getItem('weather_api_key');
   if (!apiKey) {
     throw new Error('Weather API key not configured');
@@ -38,6 +43,10 @@ async function getWeather(city) {
  * Tool 2: Scrape news headlines for a topic
  */
 async function scrapeNews(topic, count = 5) {
+  if (count < 1 || count > 50) {
+    throw new Error('count must be between 1 and 50');
+  }
+
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
 
   try {
@@ -82,6 +91,9 @@ function calculateFibonacci(n) {
   if (n > 50) {
     throw new Error('n must be at most 50');
   }
+  if (!Number.isInteger(n)) {
+    throw new Error('n must be an integer');
+  }
 
   const sequence = [];
   let a = 0, b = 1;
@@ -100,6 +112,10 @@ function calculateFibonacci(n) {
  * Tool 4: Get current time in a timezone
  */
 function getCurrentTime(timezone) {
+  if (!timezone || timezone.trim() === '') {
+    throw new Error('Timezone parameter is required');
+  }
+
   try {
     const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -183,6 +199,10 @@ const TOOL_DEFINITIONS = [
  * Execute a tool by name with arguments
  */
 async function executeTool(toolName, args) {
+  if (!args) {
+    throw new Error('Tool arguments are required');
+  }
+
   switch (toolName) {
     case 'getWeather':
       return await getWeather(args.city);
@@ -196,3 +216,9 @@ async function executeTool(toolName, args) {
       throw new Error(`Unknown tool: ${toolName}`);
   }
 }
+
+// Export to global scope for agent.js to use
+window.ChromeAgentTools = {
+  executeTool,
+  TOOL_DEFINITIONS
+};
