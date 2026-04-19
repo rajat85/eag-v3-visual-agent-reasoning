@@ -143,8 +143,14 @@ async function callGemini(contents) {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Gemini API error: ${errorData.error?.message || response.status}`);
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = `Gemini API error: ${errorData.error?.message || response.status}`;
+    } catch (e) {
+      // Response body is not JSON, use status code
+    }
+    throw new Error(errorMessage);
   }
 
   return await response.json();
@@ -166,7 +172,7 @@ async function runAgent(userQuery) {
     displayCard('user', userQuery);
 
     // Agent loop
-    let maxIterations = 10; // Prevent infinite loops
+    const maxIterations = 10; // Prevent infinite loops
     let iteration = 0;
 
     while (iteration < maxIterations) {
@@ -199,16 +205,18 @@ async function runAgent(userQuery) {
         // Display tool call
         displayCard('toolCall', { name: toolName, args: toolArgs });
 
+        // Add function call to history
+        conversationHistory.push({
+          role: 'model',
+          parts: [{ functionCall: functionCall.functionCall }]
+        });
+
         // Execute tool
         try {
           const toolResult = await window.ChromeAgentTools.executeTool(toolName, toolArgs);
           displayCard('toolResult', toolResult);
 
-          // Add function call and result to history
-          conversationHistory.push({
-            role: 'model',
-            parts: [{ functionCall: functionCall.functionCall }]
-          });
+          // Add result to history
           conversationHistory.push({
             role: 'function',
             parts: [{
@@ -223,10 +231,6 @@ async function runAgent(userQuery) {
           displayCard('error', `Tool error: ${toolError.message}`);
 
           // Add error to history so LLM can see it
-          conversationHistory.push({
-            role: 'model',
-            parts: [{ functionCall: functionCall.functionCall }]
-          });
           conversationHistory.push({
             role: 'function',
             parts: [{
