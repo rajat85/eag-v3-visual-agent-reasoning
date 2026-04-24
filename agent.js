@@ -278,3 +278,87 @@ function handleSendMessage() {
   userInput.value = '';
   runAgent(query);
 }
+
+/**
+ * Display a card in the reasoning chain
+ */
+function displayCard(type, content) {
+  const card = document.createElement('div');
+  card.className = `card card-${type}`;
+
+  let icon = '';
+  let title = '';
+  let body = '';
+
+  switch (type) {
+    case 'user':
+      icon = '👤';
+      title = 'User Query';
+      body = `<p class="card-text">${escapeHtml(content)}</p>`;
+      break;
+
+    case 'thinking':
+      icon = '🧠';
+      title = 'Agent Thinking';
+      body = `<p class="card-text">${escapeHtml(content)}</p>`;
+      break;
+
+    case 'toolCall':
+      icon = '🔧';
+      title = 'Tool Call';
+      const argsJson = JSON.stringify(content.args, null, 2);
+      body = `
+        <p class="card-text"><strong>${escapeHtml(content.name)}</strong></p>
+        <pre class="card-code">${escapeHtml(argsJson)}</pre>
+      `;
+      break;
+
+    case 'toolResult':
+      icon = '📊';
+      title = 'Tool Result';
+      const resultJson = JSON.stringify(content, null, 2);
+      body = `
+        <details class="card-details">
+          <summary>View result</summary>
+          <pre class="card-code">${escapeHtml(resultJson)}</pre>
+        </details>
+      `;
+      break;
+
+    case 'answer':
+      icon = '✅';
+      title = 'Final Answer';
+      body = `<p class="card-text card-answer-text">${escapeHtml(content)}</p>`;
+      break;
+
+    case 'error':
+      icon = '⚠️';
+      title = 'Error';
+      body = `<p class="card-text card-error-text">${escapeHtml(content)}</p>`;
+      break;
+  }
+
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="card-icon">${icon}</span>
+      <span class="card-title">${title}</span>
+    </div>
+    <div class="card-body">
+      ${body}
+    </div>
+  `;
+
+  chainContainer.appendChild(card);
+
+  // Auto-scroll to latest card
+  chainContainer.scrollTop = chainContainer.scrollHeight;
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
