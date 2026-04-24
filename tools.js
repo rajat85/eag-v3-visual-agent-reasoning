@@ -14,7 +14,9 @@ async function getWeather(city) {
     throw new Error('Weather API key not configured');
   }
 
-  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric`;
+  // Strip state codes (e.g. "Columbus, OH" → "Columbus") — API only supports city or city,country
+  const cityName = city.split(',')[0].trim();
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(cityName)}&appid=${apiKey}&units=metric`;
 
   try {
     const response = await fetch(url);

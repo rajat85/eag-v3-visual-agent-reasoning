@@ -15,6 +15,8 @@ let geminiKeyInput;
 let weatherKeyInput;
 let saveKeysBtn;
 let apiError;
+let changeKeysSection;
+let changeKeysBtn;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,14 +31,31 @@ document.addEventListener('DOMContentLoaded', () => {
   weatherKeyInput = document.getElementById('weather-key');
   saveKeysBtn = document.getElementById('save-keys-btn');
   apiError = document.getElementById('api-error');
+  changeKeysSection = document.getElementById('change-keys-section');
+  changeKeysBtn = document.getElementById('change-keys-btn');
 
   // Check if API keys are configured
   checkApiKeys();
 
+  // Restore previous conversation
+  restoreConversationState();
+
   // Event listeners
   saveKeysBtn.addEventListener('click', saveApiKeys);
+  changeKeysBtn.addEventListener('click', () => {
+    changeKeysSection.classList.add('hidden');
+    apiKeysSection.classList.remove('hidden');
+    geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+    weatherKeyInput.value = localStorage.getItem('weather_api_key') || '';
+  });
   sendBtn.addEventListener('click', handleSendMessage);
   clearBtn.addEventListener('click', clearConversation);
+  geminiKeyInput.addEventListener('input', () => {
+    if (geminiKeyInput.value.trim()) localStorage.setItem('gemini_api_key', geminiKeyInput.value.trim());
+  });
+  weatherKeyInput.addEventListener('input', () => {
+    if (weatherKeyInput.value.trim()) localStorage.setItem('weather_api_key', weatherKeyInput.value.trim());
+  });
   userInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !isProcessing) {
       handleSendMessage();
@@ -52,14 +71,17 @@ function checkApiKeys() {
   const weatherKey = localStorage.getItem('weather_api_key');
 
   if (geminiKey && weatherKey) {
-    // Keys exist, hide setup section
     apiKeysSection.classList.add('hidden');
+    changeKeysSection.classList.remove('hidden');
     userInput.disabled = false;
     sendBtn.disabled = false;
     clearBtn.disabled = false;
   } else {
-    // Show setup section
+    changeKeysSection.classList.add('hidden');
     apiKeysSection.classList.remove('hidden');
+    // Pre-fill any partially saved keys so closing popup doesn't lose progress
+    if (geminiKey) geminiKeyInput.value = geminiKey;
+    if (weatherKey) weatherKeyInput.value = weatherKey;
   }
 }
 
@@ -78,17 +100,19 @@ async function saveApiKeys() {
   // Validate Gemini key with a test call
   try {
     showLoading();
-    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`;
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
     const testResponse = await fetch(testUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': geminiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: 'test' }] }]
       })
     });
 
     if (!testResponse.ok) {
-      throw new Error('Invalid Gemini API key');
+      const errData = await testResponse.json().catch(() => ({}));
+      const msg = errData.error?.message || `HTTP ${testResponse.status}`;
+      throw new Error(msg);
     }
 
     // Save keys
@@ -119,11 +143,40 @@ function hideLoading() {
 }
 
 /**
+ * Persist conversation state to chrome.storage.local
+ */
+function saveConversationState() {
+  const cards = Array.from(chainContainer.children).map(card => ({
+    type: card.className.replace('card card-', ''),
+    html: card.outerHTML
+  }));
+  chrome.storage.local.set({ conversationHistory, cards });
+}
+
+/**
+ * Restore conversation state from chrome.storage.local
+ */
+function restoreConversationState() {
+  chrome.storage.local.get(['conversationHistory', 'cards'], (result) => {
+    if (result.conversationHistory) {
+      conversationHistory = result.conversationHistory;
+    }
+    if (result.cards && result.cards.length > 0) {
+      result.cards.forEach(({ html }) => {
+        chainContainer.insertAdjacentHTML('beforeend', html);
+      });
+      chainContainer.scrollTop = chainContainer.scrollHeight;
+    }
+  });
+}
+
+/**
  * Clear conversation history
  */
 function clearConversation() {
   conversationHistory = [];
   chainContainer.innerHTML = '';
+  chrome.storage.local.remove(['conversationHistory', 'cards']);
 }
 
 /**
@@ -131,11 +184,11 @@ function clearConversation() {
  */
 async function callGemini(contents) {
   const apiKey = localStorage.getItem('gemini_api_key');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: contents,
       tools: [{ functionDeclarations: window.ChromeAgentTools.TOOL_DEFINITIONS }]
@@ -205,11 +258,8 @@ async function runAgent(userQuery) {
         // Display tool call
         displayCard('toolCall', { name: toolName, args: toolArgs });
 
-        // Add function call to history
-        conversationHistory.push({
-          role: 'model',
-          parts: [{ functionCall: functionCall.functionCall }]
-        });
+        // Preserve full model response (including thought_signature) exactly as returned
+        conversationHistory.push({ role: 'model', parts: content.parts });
 
         // Execute tool
         try {
@@ -218,7 +268,7 @@ async function runAgent(userQuery) {
 
           // Add result to history
           conversationHistory.push({
-            role: 'function',
+            role: 'user',
             parts: [{
               functionResponse: {
                 name: toolName,
@@ -232,7 +282,7 @@ async function runAgent(userQuery) {
 
           // Add error to history so LLM can see it
           conversationHistory.push({
-            role: 'function',
+            role: 'user',
             parts: [{
               functionResponse: {
                 name: toolName,
@@ -349,9 +399,8 @@ function displayCard(type, content) {
   `;
 
   chainContainer.appendChild(card);
-
-  // Auto-scroll to latest card
   chainContainer.scrollTop = chainContainer.scrollHeight;
+  saveConversationState();
 }
 
 /**

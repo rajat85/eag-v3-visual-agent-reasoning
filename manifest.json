@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Chrome Agent AI",
+  "name": "Visual Agent Reasoning",
   "version": "1.0.0",
-  "description": "Agentic AI with multi-step reasoning and visual tool chain display",
-  "permissions": [],
+  "description": "Visualize how an AI agent reasons — watch each LLM call, tool execution, and chain-of-thought step by step",
+  "permissions": ["windows", "storage"],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
     "https://api.openweathermap.org/*",
     "https://news.google.com/*"
   ],
-  "action": {
-    "default_popup": "popup.html"
+  "action": {},
+  "background": {
+    "service_worker": "background.js"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
