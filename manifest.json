@@ -7,7 +7,8 @@
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
     "https://api.openweathermap.org/*",
-    "https://news.google.com/*"
+    "https://news.google.com/*",
+    "http://localhost:11434/*"
   ],
   "action": {},
   "background": {

@@ -14,7 +14,7 @@
 
     <div id="api-keys-section" class="api-keys-section">
       <h3>API Keys Setup</h3>
-      <div class="input-group">
+      <div class="input-group" id="gemini-key-group">
         <label for="gemini-key">Google Gemini API Key:</label>
         <input type="password" id="gemini-key" placeholder="Enter Gemini API key">
       </div>
@@ -30,6 +30,14 @@
 
     <div id="change-keys-section" class="change-keys-section hidden">
       <button id="change-keys-btn">Change API Keys</button>
+    </div>
+
+    <div class="llm-selector">
+      <span class="llm-label">Use Gemini</span>
+      <label class="toggle">
+        <input type="checkbox" id="gemini-toggle">
+        <span class="toggle-slider"></span>
+      </label>
     </div>
 
     <div class="input-section">

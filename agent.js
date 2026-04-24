@@ -34,6 +34,16 @@ document.addEventListener('DOMContentLoaded', () => {
   changeKeysSection = document.getElementById('change-keys-section');
   changeKeysBtn = document.getElementById('change-keys-btn');
 
+  // Restore toggle state
+  const geminiToggle = document.getElementById('gemini-toggle');
+  geminiToggle.checked = localStorage.getItem('gemini_enabled') === 'true';
+  updateGeminiKeyVisibility(geminiToggle.checked);
+  geminiToggle.addEventListener('change', () => {
+    localStorage.setItem('gemini_enabled', geminiToggle.checked);
+    updateGeminiKeyVisibility(geminiToggle.checked);
+    checkApiKeys();
+  });
+
   // Check if API keys are configured
   checkApiKeys();
 
@@ -66,11 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Check if API keys are configured
  */
+function updateGeminiKeyVisibility(enabled) {
+  document.getElementById('gemini-key-group').classList.toggle('hidden', !enabled);
+}
+
 function checkApiKeys() {
+  const geminiEnabled = document.getElementById('gemini-toggle').checked;
   const geminiKey = localStorage.getItem('gemini_api_key');
   const weatherKey = localStorage.getItem('weather_api_key');
 
-  if (geminiKey && weatherKey) {
+  const keysReady = geminiEnabled ? (geminiKey && weatherKey) : weatherKey;
+
+  if (keysReady) {
     apiKeysSection.classList.add('hidden');
     changeKeysSection.classList.remove('hidden');
     userInput.disabled = false;
@@ -79,7 +96,6 @@ function checkApiKeys() {
   } else {
     changeKeysSection.classList.add('hidden');
     apiKeysSection.classList.remove('hidden');
-    // Pre-fill any partially saved keys so closing popup doesn't lose progress
     if (geminiKey) geminiKeyInput.value = geminiKey;
     if (weatherKey) weatherKeyInput.value = weatherKey;
   }
@@ -180,33 +196,110 @@ function clearConversation() {
 }
 
 /**
- * Call Google Gemini API
+ * Call the selected LLM, falling back to Ollama if Gemini is selected but fails.
  */
+async function callLLM(contents) {
+  const geminiEnabled = document.getElementById('gemini-toggle').checked;
+  if (!geminiEnabled) {
+    return await callOllama(contents);
+  }
+  try {
+    return await callGemini(contents);
+  } catch (geminiError) {
+    displayCard('thinking', `⚠️ Gemini failed (${geminiError.message}) — falling back to Ollama gemma4`);
+    return await callOllama(contents);
+  }
+}
+
 async function callGemini(contents) {
   const apiKey = localStorage.getItem('gemini_api_key');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
-
-  const response = await fetch(url, {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
     body: JSON.stringify({
-      contents: contents,
+      contents,
       tools: [{ functionDeclarations: window.ChromeAgentTools.TOOL_DEFINITIONS }]
     })
   });
 
   if (!response.ok) {
-    let errorMessage = `API error: ${response.status}`;
-    try {
-      const errorData = await response.json();
-      errorMessage = `Gemini API error: ${errorData.error?.message || response.status}`;
-    } catch (e) {
-      // Response body is not JSON, use status code
-    }
-    throw new Error(errorMessage);
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${response.status}`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  const content = data.candidates?.[0]?.content;
+  if (!content) throw new Error('No response from Gemini');
+
+  const functionCallPart = content.parts?.find(p => p.functionCall);
+  return {
+    provider: 'Gemini',
+    rawContent: content,
+    functionCall: functionCallPart ? { name: functionCallPart.functionCall.name, args: functionCallPart.functionCall.args } : null,
+    text: content.parts?.find(p => p.text)?.text || null
+  };
+}
+
+async function callOllama(contents) {
+  // Convert Gemini-format contents to OpenAI-format messages
+  const messages = contents.map(c => {
+    if (c.role === 'user') {
+      const fnResponse = c.parts?.find(p => p.functionResponse);
+      if (fnResponse) {
+        return {
+          role: 'tool',
+          tool_call_id: fnResponse.functionResponse.name,
+          content: JSON.stringify(fnResponse.functionResponse.response)
+        };
+      }
+      return { role: 'user', content: c.parts?.find(p => p.text)?.text || '' };
+    }
+    if (c.role === 'model') {
+      const fnCall = c.parts?.find(p => p.functionCall);
+      if (fnCall) {
+        return {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: fnCall.functionCall.name,
+            type: 'function',
+            function: { name: fnCall.functionCall.name, arguments: JSON.stringify(fnCall.functionCall.args) }
+          }]
+        };
+      }
+      return { role: 'assistant', content: c.parts?.find(p => p.text)?.text || '' };
+    }
+    return null;
+  }).filter(Boolean);
+
+  // Convert Gemini tool definitions to OpenAI format
+  const tools = window.ChromeAgentTools.TOOL_DEFINITIONS.map(t => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.parameters }
+  }));
+
+  const response = await fetch('http://localhost:11434/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'gemma4', messages, tools })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(`Ollama error: ${errData.error?.message || `HTTP ${response.status}`}`);
+  }
+
+  const data = await response.json();
+  const message = data.choices?.[0]?.message;
+  if (!message) throw new Error('No response from Ollama');
+
+  const toolCall = message.tool_calls?.[0];
+  return {
+    provider: 'Ollama gemma4',
+    rawContent: null,
+    functionCall: toolCall ? { name: toolCall.function.name, args: JSON.parse(toolCall.function.arguments) } : null,
+    text: message.content || null
+  };
 }
 
 /**
@@ -232,78 +325,47 @@ async function runAgent(userQuery) {
       iteration++;
       showLoading();
 
-      // Call Gemini with conversation history
-      const response = await callGemini(conversationHistory);
+      const result = await callLLM(conversationHistory);
       hideLoading();
 
-      const candidate = response.candidates?.[0];
-      if (!candidate) {
-        throw new Error('No response from Gemini');
-      }
+      displayCard('provider', result.provider);
 
-      const content = candidate.content;
-      const functionCall = content.parts?.find(part => part.functionCall);
+      if (result.functionCall) {
+        const { name: toolName, args: toolArgs } = result.functionCall;
 
-      if (functionCall) {
-        // LLM wants to use a tool
-        const toolName = functionCall.functionCall.name;
-        const toolArgs = functionCall.functionCall.args;
-
-        // Display thinking (if there's text before function call)
-        const textPart = content.parts?.find(part => part.text);
-        if (textPart?.text) {
-          displayCard('thinking', textPart.text);
-        }
-
-        // Display tool call
+        if (result.text) displayCard('thinking', result.text);
         displayCard('toolCall', { name: toolName, args: toolArgs });
 
-        // Preserve full model response (including thought_signature) exactly as returned
-        conversationHistory.push({ role: 'model', parts: content.parts });
+        // Preserve full model turn in history
+        if (result.rawContent) {
+          conversationHistory.push({ role: 'model', parts: result.rawContent.parts });
+        } else {
+          conversationHistory.push({
+            role: 'model',
+            parts: [{ functionCall: { name: toolName, args: toolArgs } }]
+          });
+        }
 
-        // Execute tool
         try {
           const toolResult = await window.ChromeAgentTools.executeTool(toolName, toolArgs);
           displayCard('toolResult', toolResult);
-
-          // Add result to history
           conversationHistory.push({
             role: 'user',
-            parts: [{
-              functionResponse: {
-                name: toolName,
-                response: { result: toolResult }
-              }
-            }]
+            parts: [{ functionResponse: { name: toolName, response: { result: toolResult } } }]
           });
         } catch (toolError) {
-          // Tool execution failed
           displayCard('error', `Tool error: ${toolError.message}`);
-
-          // Add error to history so LLM can see it
           conversationHistory.push({
             role: 'user',
-            parts: [{
-              functionResponse: {
-                name: toolName,
-                response: { error: toolError.message }
-              }
-            }]
+            parts: [{ functionResponse: { name: toolName, response: { error: toolError.message } } }]
           });
         }
-
-        // Continue loop to get next LLM response
       } else {
-        // LLM provided final answer
-        const textPart = content.parts?.find(part => part.text);
-        if (textPart?.text) {
-          displayCard('answer', textPart.text);
-          conversationHistory.push({
-            role: 'model',
-            parts: [{ text: textPart.text }]
-          });
+        if (result.text) {
+          displayCard('answer', result.text);
+          conversationHistory.push({ role: 'model', parts: [{ text: result.text }] });
         }
-        break; // Exit loop
+        break;
       }
     }
 
@@ -379,6 +441,12 @@ function displayCard(type, content) {
       icon = '✅';
       title = 'Final Answer';
       body = `<p class="card-text card-answer-text">${escapeHtml(content)}</p>`;
+      break;
+
+    case 'provider':
+      icon = content === 'Gemini' ? '✨' : '🦙';
+      title = `Using ${content}`;
+      body = '';
       break;
 
     case 'error':
